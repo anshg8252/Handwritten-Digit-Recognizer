@@ -79,3 +79,8 @@ test_loss, test_accuracy = model.evaluate(
 
 print("Test Loss:", test_loss)
 print("Test Accuracy:", test_accuracy)
+
+# Save the trained model
+model.save("digit_model.keras")
+
+print("Model saved successfully!")
