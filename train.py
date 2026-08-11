@@ -70,3 +70,12 @@ history = model.fit(
     epochs=5,
     validation_split=0.1
 )
+
+# Evaluate the model on test data
+test_loss, test_accuracy = model.evaluate(
+    x_test,
+    y_test
+)
+
+print("Test Loss:", test_loss)
+print("Test Accuracy:", test_accuracy)
