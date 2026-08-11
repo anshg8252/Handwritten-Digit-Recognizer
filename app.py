@@ -9,50 +9,87 @@ import cv2
 model = tf.keras.models.load_model("digit_model.keras")
 
 
-# -----------------------------
+# =============================
 # Window
-# -----------------------------
+# =============================
 
 root = tk.Tk()
 root.title("Handwritten Digit Recognizer")
-root.geometry("520x680")
+root.geometry("600x750")
 root.resizable(False, False)
 
 
-# -----------------------------
-# Title
-# -----------------------------
+# =============================
+# Colors
+# =============================
 
-title = tk.Label(
+BG_COLOR = "#f4f6f8"
+CARD_COLOR = "#ffffff"
+TEXT_COLOR = "#1f2937"
+
+
+root.configure(bg=BG_COLOR)
+
+
+# =============================
+# Header
+# =============================
+
+header = tk.Frame(
     root,
-    text="Handwritten Digit Recognizer",
-    font=("Arial", 24, "bold")
+    bg=BG_COLOR
 )
 
-title.pack(pady=(20, 5))
+header.pack(
+    pady=(25, 10)
+)
+
+
+title = tk.Label(
+    header,
+    text="Handwritten Digit Recognizer",
+    font=("Arial", 25, "bold"),
+    bg=BG_COLOR,
+    fg=TEXT_COLOR
+)
+
+title.pack()
 
 
 subtitle = tk.Label(
-    root,
-    text="Draw one or more digits",
-    font=("Arial", 12)
+    header,
+    text="Draw one or more digits and let the CNN recognize them",
+    font=("Arial", 11),
+    bg=BG_COLOR,
+    fg="#6b7280"
 )
 
-subtitle.pack(pady=(0, 15))
+subtitle.pack(pady=5)
 
 
-# -----------------------------
-# Canvas
-# -----------------------------
+# =============================
+# Drawing Area
+# =============================
+
+canvas_frame = tk.Frame(
+    root,
+    bg=CARD_COLOR,
+    padx=10,
+    pady=10
+)
+
+canvas_frame.pack()
+
 
 canvas_size = 400
 
+
 canvas = tk.Canvas(
-    root,
+    canvas_frame,
     width=canvas_size,
     height=canvas_size,
     bg="black",
-    highlightthickness=2
+    highlightthickness=0
 )
 
 canvas.pack()
@@ -68,9 +105,9 @@ image = Image.new(
 draw = ImageDraw.Draw(image)
 
 
-# -----------------------------
-# Draw
-# -----------------------------
+# =============================
+# Drawing Function
+# =============================
 
 def paint(event):
 
@@ -108,9 +145,9 @@ def paint(event):
     )
 
 
-# -----------------------------
-# Clear
-# -----------------------------
+# =============================
+# Clear Function
+# =============================
 
 def clear_canvas():
 
@@ -130,32 +167,27 @@ def clear_canvas():
     )
 
 
-# -----------------------------
-# Prepare one digit
-# -----------------------------
+# =============================
+# Prepare Digit
+# =============================
 
 def prepare_digit(digit_image):
 
-    # Find bounding box
     bbox = digit_image.getbbox()
 
     if bbox is None:
         return None
 
-    # Crop
     digit_image = digit_image.crop(bbox)
 
-    # Resize
     digit_image.thumbnail((20, 20))
 
-    # Create 28x28 image
     processed = Image.new(
         "L",
         (28, 28),
         0
     )
 
-    # Center
     x = (28 - digit_image.width) // 2
     y = (28 - digit_image.height) // 2
 
@@ -164,13 +196,10 @@ def prepare_digit(digit_image):
         (x, y)
     )
 
-    # Convert to numpy
     arr = np.array(processed)
 
-    # Normalize
     arr = arr / 255.0
 
-    # CNN input shape
     arr = arr.reshape(
         1,
         28,
@@ -181,16 +210,14 @@ def prepare_digit(digit_image):
     return arr
 
 
-# -----------------------------
-# Predict multiple digits
-# -----------------------------
+# =============================
+# Prediction
+# =============================
 
 def predict_digit():
 
-    # Convert drawing to numpy
     img = np.array(image)
 
-    # Threshold
     _, binary = cv2.threshold(
         img,
         50,
@@ -198,7 +225,6 @@ def predict_digit():
         cv2.THRESH_BINARY
     )
 
-    # Find connected components
     contours, _ = cv2.findContours(
         binary,
         cv2.RETR_EXTERNAL,
@@ -211,11 +237,9 @@ def predict_digit():
 
         x, y, w, h = cv2.boundingRect(contour)
 
-        # Ignore very small objects
         if w < 10 or h < 15:
             continue
 
-        # Ignore extremely large regions
         if w > 150 or h > 300:
             continue
 
@@ -223,7 +247,6 @@ def predict_digit():
             (x, y, w, h)
         )
 
-    # No digits
     if not digit_regions:
 
         result_label.config(
@@ -236,7 +259,7 @@ def predict_digit():
 
         return
 
-    # Sort digits from left to right
+    # Sort from left to right
     digit_regions.sort(
         key=lambda region: region[0]
     )
@@ -244,14 +267,19 @@ def predict_digit():
     result = ""
     confidences = []
 
-    # Process every detected digit
     for x, y, w, h in digit_regions:
 
-        # Add padding
         padding = 10
 
-        x1 = max(0, x - padding)
-        y1 = max(0, y - padding)
+        x1 = max(
+            0,
+            x - padding
+        )
+
+        y1 = max(
+            0,
+            y - padding
+        )
 
         x2 = min(
             canvas_size,
@@ -267,7 +295,6 @@ def predict_digit():
             (x1, y1, x2, y2)
         )
 
-        # Prepare for CNN
         input_image = prepare_digit(
             digit_image
         )
@@ -275,7 +302,6 @@ def predict_digit():
         if input_image is None:
             continue
 
-        # Prediction
         prediction = model.predict(
             input_image,
             verbose=0
@@ -293,7 +319,6 @@ def predict_digit():
             confidence
         )
 
-    # Average confidence
     if confidences:
 
         avg_confidence = (
@@ -310,22 +335,28 @@ def predict_digit():
         )
 
 
-# -----------------------------
+# =============================
 # Buttons
-# -----------------------------
+# =============================
 
-button_frame = tk.Frame(root)
+button_frame = tk.Frame(
+    root,
+    bg=BG_COLOR
+)
 
-button_frame.pack(pady=15)
+button_frame.pack(
+    pady=20
+)
 
 
 predict_button = tk.Button(
     button_frame,
     text="Predict",
     command=predict_digit,
-    width=15,
+    width=16,
     height=2,
-    font=("Arial", 12, "bold")
+    font=("Arial", 12, "bold"),
+    relief="flat"
 )
 
 predict_button.grid(
@@ -339,9 +370,10 @@ clear_button = tk.Button(
     button_frame,
     text="Clear",
     command=clear_canvas,
-    width=15,
+    width=16,
     height=2,
-    font=("Arial", 12, "bold")
+    font=("Arial", 12, "bold"),
+    relief="flat"
 )
 
 clear_button.grid(
@@ -351,31 +383,37 @@ clear_button.grid(
 )
 
 
-# -----------------------------
+# =============================
 # Results
-# -----------------------------
+# =============================
 
 result_label = tk.Label(
     root,
     text="Prediction: -",
-    font=("Arial", 22, "bold")
+    font=("Arial", 24, "bold"),
+    bg=BG_COLOR,
+    fg=TEXT_COLOR
 )
 
-result_label.pack(pady=(5, 5))
+result_label.pack(
+    pady=(5, 5)
+)
 
 
 confidence_label = tk.Label(
     root,
     text="Confidence: -",
-    font=("Arial", 15)
+    font=("Arial", 15),
+    bg=BG_COLOR,
+    fg="#6b7280"
 )
 
 confidence_label.pack()
 
 
-# -----------------------------
-# Mouse
-# -----------------------------
+# =============================
+# Mouse Event
+# =============================
 
 canvas.bind(
     "<B1-Motion>",
@@ -383,8 +421,8 @@ canvas.bind(
 )
 
 
-# -----------------------------
-# Start
-# -----------------------------
+# =============================
+# Start Application
+# =============================
 
 root.mainloop()
