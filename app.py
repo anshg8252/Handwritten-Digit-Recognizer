@@ -2,26 +2,61 @@ import tkinter as tk
 import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageDraw
+import cv2
+
 
 # Load trained model
 model = tf.keras.models.load_model("digit_model.keras")
 
+
+# -----------------------------
 # Window
+# -----------------------------
+
 root = tk.Tk()
 root.title("Handwritten Digit Recognizer")
-root.geometry("500x600")
+root.geometry("520x680")
+root.resizable(False, False)
 
+
+# -----------------------------
+# Title
+# -----------------------------
+
+title = tk.Label(
+    root,
+    text="Handwritten Digit Recognizer",
+    font=("Arial", 24, "bold")
+)
+
+title.pack(pady=(20, 5))
+
+
+subtitle = tk.Label(
+    root,
+    text="Draw one or more digits",
+    font=("Arial", 12)
+)
+
+subtitle.pack(pady=(0, 15))
+
+
+# -----------------------------
 # Canvas
+# -----------------------------
+
 canvas_size = 400
 
 canvas = tk.Canvas(
     root,
     width=canvas_size,
     height=canvas_size,
-    bg="black"
+    bg="black",
+    highlightthickness=2
 )
 
-canvas.pack(pady=20)
+canvas.pack()
+
 
 # PIL image
 image = Image.new(
@@ -33,15 +68,25 @@ image = Image.new(
 draw = ImageDraw.Draw(image)
 
 
-# Draw digit
+# -----------------------------
+# Draw
+# -----------------------------
+
 def paint(event):
+
     brush_size = 5
 
-    # Keep drawing inside a safe margin
     margin = 40
 
-    x = max(margin, min(event.x, canvas_size - margin))
-    y = max(margin, min(event.y, canvas_size - margin))
+    x = max(
+        margin,
+        min(event.x, canvas_size - margin)
+    )
+
+    y = max(
+        margin,
+        min(event.y, canvas_size - margin)
+    )
 
     canvas.create_oval(
         x - brush_size,
@@ -61,33 +106,14 @@ def paint(event):
         ],
         fill=255
     )
-    x = event.x
-    y = event.y
-
-    brush_size = 12
-
-    canvas.create_oval(
-        x - brush_size,
-        y - brush_size,
-        x + brush_size,
-        y + brush_size,
-        fill="white",
-        outline="white"
-    )
-
-    draw.ellipse(
-        [
-            x - brush_size,
-            y - brush_size,
-            x + brush_size,
-            y + brush_size
-        ],
-        fill=255
-    )
 
 
-# Clear canvas
+# -----------------------------
+# Clear
+# -----------------------------
+
 def clear_canvas():
+
     canvas.delete("all")
 
     draw.rectangle(
@@ -96,135 +122,269 @@ def clear_canvas():
     )
 
     result_label.config(
-        text="Prediction: -\nConfidence: -"
+        text="Prediction: -"
+    )
+
+    confidence_label.config(
+        text="Confidence: -"
     )
 
 
-# Predict digit
-def predict_digit():
+# -----------------------------
+# Prepare one digit
+# -----------------------------
 
-    # Convert PIL image to numpy
-    img_array = np.array(image)
+def prepare_digit(digit_image):
 
-    # Find the handwritten digit
-    bbox = Image.fromarray(img_array).getbbox()
+    # Find bounding box
+    bbox = digit_image.getbbox()
 
     if bbox is None:
-        result_label.config(
-            text="Please draw a digit first!"
+        return None
+
+    # Crop
+    digit_image = digit_image.crop(bbox)
+
+    # Resize
+    digit_image.thumbnail((20, 20))
+
+    # Create 28x28 image
+    processed = Image.new(
+        "L",
+        (28, 28),
+        0
+    )
+
+    # Center
+    x = (28 - digit_image.width) // 2
+    y = (28 - digit_image.height) // 2
+
+    processed.paste(
+        digit_image,
+        (x, y)
+    )
+
+    # Convert to numpy
+    arr = np.array(processed)
+
+    # Normalize
+    arr = arr / 255.0
+
+    # CNN input shape
+    arr = arr.reshape(
+        1,
+        28,
+        28,
+        1
+    )
+
+    return arr
+
+
+# -----------------------------
+# Predict multiple digits
+# -----------------------------
+
+def predict_digit():
+
+    # Convert drawing to numpy
+    img = np.array(image)
+
+    # Threshold
+    _, binary = cv2.threshold(
+        img,
+        50,
+        255,
+        cv2.THRESH_BINARY
+    )
+
+    # Find connected components
+    contours, _ = cv2.findContours(
+        binary,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    digit_regions = []
+
+    for contour in contours:
+
+        x, y, w, h = cv2.boundingRect(contour)
+
+        # Ignore very small objects
+        if w < 10 or h < 15:
+            continue
+
+        # Ignore extremely large regions
+        if w > 150 or h > 300:
+            continue
+
+        digit_regions.append(
+            (x, y, w, h)
         )
+
+    # No digits
+    if not digit_regions:
+
+        result_label.config(
+            text="Please draw a digit!"
+        )
+
+        confidence_label.config(
+            text=""
+        )
+
         return
 
-    # Crop unnecessary black space
-    img = image.crop(bbox)
-
-    # Resize while maintaining aspect ratio
-    img.thumbnail((20, 20))
-
-    # Create 28x28 black canvas
-    canvas_image = Image.new("L", (28, 28), 0)
-
-    # Center the digit
-    x = (28 - img.width) // 2
-    y = (28 - img.height) // 2
-
-    canvas_image.paste(img, (x, y))
-
-    # Convert to numpy
-    img_array = np.array(canvas_image)
-
-    # Normalize
-    img_array = img_array / 255.0
-
-    # Reshape for CNN
-    img_array = img_array.reshape(
-        1, 28, 28, 1
+    # Sort digits from left to right
+    digit_regions.sort(
+        key=lambda region: region[0]
     )
 
-    # Prediction
-    prediction = model.predict(
-        img_array,
-        verbose=0
-    )
+    result = ""
+    confidences = []
 
-    digit = np.argmax(prediction)
+    # Process every detected digit
+    for x, y, w, h in digit_regions:
 
-    confidence = np.max(prediction) * 100
+        # Add padding
+        padding = 10
 
-    result_label.config(
-        text=f"Prediction: {digit}\n"
-             f"Confidence: {confidence:.2f}%"
-    )
+        x1 = max(0, x - padding)
+        y1 = max(0, y - padding)
 
-    # Resize to 28x28
-    img = image.resize((28, 28))
+        x2 = min(
+            canvas_size,
+            x + w + padding
+        )
 
-    # Convert to numpy
-    img_array = np.array(img)
+        y2 = min(
+            canvas_size,
+            y + h + padding
+        )
 
-    # Normalize
-    img_array = img_array / 255.0
+        digit_image = image.crop(
+            (x1, y1, x2, y2)
+        )
 
-    # Reshape for CNN
-    img_array = img_array.reshape(
-        1, 28, 28, 1
-    )
+        # Prepare for CNN
+        input_image = prepare_digit(
+            digit_image
+        )
 
-    # Prediction
-    prediction = model.predict(
-        img_array,
-        verbose=0
-    )
+        if input_image is None:
+            continue
 
-    digit = np.argmax(prediction)
+        # Prediction
+        prediction = model.predict(
+            input_image,
+            verbose=0
+        )
 
-    confidence = np.max(prediction) * 100
+        digit = np.argmax(prediction)
 
-    result_label.config(
-        text=f"Prediction: {digit}\n"
-             f"Confidence: {confidence:.2f}%"
-    )
+        confidence = (
+            np.max(prediction) * 100
+        )
+
+        result += str(digit)
+
+        confidences.append(
+            confidence
+        )
+
+    # Average confidence
+    if confidences:
+
+        avg_confidence = (
+            sum(confidences)
+            / len(confidences)
+        )
+
+        result_label.config(
+            text=f"Prediction: {result}"
+        )
+
+        confidence_label.config(
+            text=f"Confidence: {avg_confidence:.2f}%"
+        )
 
 
-# Mouse drawing
+# -----------------------------
+# Buttons
+# -----------------------------
+
+button_frame = tk.Frame(root)
+
+button_frame.pack(pady=15)
+
+
+predict_button = tk.Button(
+    button_frame,
+    text="Predict",
+    command=predict_digit,
+    width=15,
+    height=2,
+    font=("Arial", 12, "bold")
+)
+
+predict_button.grid(
+    row=0,
+    column=0,
+    padx=10
+)
+
+
+clear_button = tk.Button(
+    button_frame,
+    text="Clear",
+    command=clear_canvas,
+    width=15,
+    height=2,
+    font=("Arial", 12, "bold")
+)
+
+clear_button.grid(
+    row=0,
+    column=1,
+    padx=10
+)
+
+
+# -----------------------------
+# Results
+# -----------------------------
+
+result_label = tk.Label(
+    root,
+    text="Prediction: -",
+    font=("Arial", 22, "bold")
+)
+
+result_label.pack(pady=(5, 5))
+
+
+confidence_label = tk.Label(
+    root,
+    text="Confidence: -",
+    font=("Arial", 15)
+)
+
+confidence_label.pack()
+
+
+# -----------------------------
+# Mouse
+# -----------------------------
+
 canvas.bind(
     "<B1-Motion>",
     paint
 )
 
-# Predict button
-predict_button = tk.Button(
-    root,
-    text="Predict",
-    command=predict_digit,
-    width=15,
-    height=2
-)
 
-predict_button.pack(pady=5)
+# -----------------------------
+# Start
+# -----------------------------
 
-
-# Clear button
-clear_button = tk.Button(
-    root,
-    text="Clear",
-    command=clear_canvas,
-    width=15,
-    height=2
-)
-
-clear_button.pack(pady=5)
-
-
-# Result label
-result_label = tk.Label(
-    root,
-    text="Prediction: -\nConfidence: -",
-    font=("Arial", 18)
-)
-
-result_label.pack(pady=20)
-
-
-# Start application
 root.mainloop()
