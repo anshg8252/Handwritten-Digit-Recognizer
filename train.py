@@ -22,12 +22,24 @@ print("Training data shape:", x_train.shape)
 print("Testing data shape:", x_test.shape)
 
 # Create CNN model
+# Create CNN model with data augmentation
 model = tf.keras.Sequential([
+
+    tf.keras.layers.Input(shape=(28, 28, 1)),
+
+    # Data augmentation
+    tf.keras.layers.RandomRotation(0.1),
+    tf.keras.layers.RandomZoom(0.1),
+    tf.keras.layers.RandomTranslation(
+        height_factor=0.1,
+        width_factor=0.1
+    ),
+
+    # CNN layers
     tf.keras.layers.Conv2D(
         32,
         (3, 3),
-        activation='relu',
-        input_shape=(28, 28, 1)
+        activation='relu'
     ),
 
     tf.keras.layers.MaxPooling2D((2, 2)),
@@ -53,6 +65,7 @@ model = tf.keras.Sequential([
     )
 ])
 
+model.summary()
 # Display model structure
 model.summary()
 
