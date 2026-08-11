@@ -20,3 +20,38 @@ x_test = x_test.reshape(-1, 28, 28, 1)
 
 print("Training data shape:", x_train.shape)
 print("Testing data shape:", x_test.shape)
+
+# Create CNN model
+model = tf.keras.Sequential([
+    tf.keras.layers.Conv2D(
+        32,
+        (3, 3),
+        activation='relu',
+        input_shape=(28, 28, 1)
+    ),
+
+    tf.keras.layers.MaxPooling2D((2, 2)),
+
+    tf.keras.layers.Conv2D(
+        64,
+        (3, 3),
+        activation='relu'
+    ),
+
+    tf.keras.layers.MaxPooling2D((2, 2)),
+
+    tf.keras.layers.Flatten(),
+
+    tf.keras.layers.Dense(
+        128,
+        activation='relu'
+    ),
+
+    tf.keras.layers.Dense(
+        10,
+        activation='softmax'
+    )
+])
+
+# Display model structure
+model.summary()
